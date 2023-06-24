@@ -61,6 +61,9 @@ interface IHonorPair {
     function price1CumulativeLast() external view returns (uint);
     function kLast() external view returns (uint);
 
+    function swapFee() external view returns (uint32);
+    function devFee() external view returns (uint32);
+
     function mint(address to) external returns (uint liquidity);
     function burn(address to) external returns (uint amount0, uint amount1);
     function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external;
@@ -68,6 +71,8 @@ interface IHonorPair {
     function sync() external;
 
     function initialize(address, address) external;
+    function setSwapFee(uint32) external;
+    function setDevFee(uint32) external;
 }
 
 interface IHonorERC20 {
@@ -250,7 +255,7 @@ interface IHonorCallee {
     function honorCall(address sender, uint amount0, uint amount1, bytes calldata data) external;
 }
 
-contract HonorPair is IHonorPair, HonorERC20 {
+contract HonorPair is IHonorPair, IERC20 {
     using SafeMath  for uint;
     using UQ112x112 for uint224;
 
@@ -268,10 +273,12 @@ contract HonorPair is IHonorPair, HonorERC20 {
     uint public price0CumulativeLast;
     uint public price1CumulativeLast;
     uint public kLast; // reserve0 * reserve1, as of immediately after the most recent liquidity event
+    uint32 public swapFee = 1; // uses 0.1% default
+    uint32 public devFee = 1; // uses 0.5% default from swap fee
 
     uint private unlocked = 1;
     modifier lock() {
-        require(unlocked == 1, 'Honor: LOCKED');
+        require(unlocked == 1, 'HonorPair: LOCKED');
         unlocked = 0;
         _;
         unlocked = 1;
@@ -285,7 +292,7 @@ contract HonorPair is IHonorPair, HonorERC20 {
 
     function _safeTransfer(address token, address to, uint value) private {
         (bool success, bytes memory data) = token.call(abi.encodeWithSelector(SELECTOR, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'Honor: TRANSFER_FAILED');
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'HonorSwap: TRANSFER_FAILED');
     }
 
     event Mint(address indexed sender, uint amount0, uint amount1);
@@ -306,14 +313,28 @@ contract HonorPair is IHonorPair, HonorERC20 {
 
     // called once by the factory at time of deployment
     function initialize(address _token0, address _token1) external {
-        require(msg.sender == factory, 'Honor: FORBIDDEN'); // sufficient check
+        require(msg.sender == factory, 'HonorSwap: FORBIDDEN'); // sufficient check
         token0 = _token0;
         token1 = _token1;
     }
 
+    function setSwapFee(uint32 _swapFee) external {
+        require(_swapFee > 0, "HonorSwapPair: lower then 0");
+        require(msg.sender == factory, 'HonorSwapPair: FORBIDDEN');
+        require(_swapFee <= 1000, 'HonorSwapPair: FORBIDDEN_FEE');
+        swapFee = _swapFee;
+    }
+    
+    function setDevFee(uint32 _devFee) external {
+        require(_devFee > 0, "HonorSwapPair: lower then 0");
+        require(msg.sender == factory, 'HonorSwapPair: FORBIDDEN');
+        require(_devFee <= 500, 'HonorSwapPair: FORBIDDEN_FEE');
+        devFee = _devFee;
+    }
+
     // update reserves and, on the first call per block, price accumulators
     function _update(uint balance0, uint balance1, uint112 _reserve0, uint112 _reserve1) private {
-        require(balance0 <= uint112(-1) && balance1 <= uint112(-1), 'Honor: OVERFLOW');
+        require(balance0 <= uint112(-1) && balance1 <= uint112(-1), 'HonorSwap: OVERFLOW');
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast; // overflow is desired
         if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
@@ -327,9 +348,9 @@ contract HonorPair is IHonorPair, HonorERC20 {
         emit Sync(reserve0, reserve1);
     }
 
-    // if fee is on, mint liquidity equivalent to 8/25 of the growth in sqrt(k)
+    // if fee is on, mint liquidity equivalent to 1/6th of the growth in sqrt(k)
     function _mintFee(uint112 _reserve0, uint112 _reserve1) private returns (bool feeOn) {
-        address feeTo = IHonorFactory(factory).feeTo();
+        address feeTo = IHonorSwapFactory(factory).feeTo();
         feeOn = feeTo != address(0);
         uint _kLast = kLast; // gas savings
         if (feeOn) {
@@ -337,8 +358,8 @@ contract HonorPair is IHonorPair, HonorERC20 {
                 uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
                 uint rootKLast = Math.sqrt(_kLast);
                 if (rootK > rootKLast) {
-                    uint numerator = totalSupply.mul(rootK.sub(rootKLast)).mul(8);
-                    uint denominator = rootK.mul(17).add(rootKLast.mul(8));
+                    uint numerator = totalSupply.mul(rootK.sub(rootKLast));
+                    uint denominator = rootK.mul(devFee).add(rootKLast);
                     uint liquidity = numerator / denominator;
                     if (liquidity > 0) _mint(feeTo, liquidity);
                 }
@@ -364,7 +385,7 @@ contract HonorPair is IHonorPair, HonorERC20 {
         } else {
             liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
         }
-        require(liquidity > 0, 'Honor: INSUFFICIENT_LIQUIDITY_MINTED');
+        require(liquidity > 0, 'HonorSwap: INSUFFICIENT_LIQUIDITY_MINTED');
         _mint(to, liquidity);
 
         _update(balance0, balance1, _reserve0, _reserve1);
@@ -385,7 +406,7 @@ contract HonorPair is IHonorPair, HonorERC20 {
         uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
         amount0 = liquidity.mul(balance0) / _totalSupply; // using balances ensures pro-rata distribution
         amount1 = liquidity.mul(balance1) / _totalSupply; // using balances ensures pro-rata distribution
-        require(amount0 > 0 && amount1 > 0, 'Honor: INSUFFICIENT_LIQUIDITY_BURNED');
+        require(amount0 > 0 && amount1 > 0, 'HonorSwap: INSUFFICIENT_LIQUIDITY_BURNED');
         _burn(address(this), liquidity);
         _safeTransfer(_token0, to, amount0);
         _safeTransfer(_token1, to, amount1);
@@ -399,29 +420,30 @@ contract HonorPair is IHonorPair, HonorERC20 {
 
     // this low-level function should be called from a contract which performs important safety checks
     function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external lock {
-        require(amount0Out > 0 || amount1Out > 0, 'Honor: INSUFFICIENT_OUTPUT_AMOUNT');
+        require(amount0Out > 0 || amount1Out > 0, 'HonorSwap: INSUFFICIENT_OUTPUT_AMOUNT');
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
-        require(amount0Out < _reserve0 && amount1Out < _reserve1, 'Honor: INSUFFICIENT_LIQUIDITY');
+        require(amount0Out < _reserve0 && amount1Out < _reserve1, 'HonorSwap: INSUFFICIENT_LIQUIDITY');
 
         uint balance0;
         uint balance1;
         { // scope for _token{0,1}, avoids stack too deep errors
         address _token0 = token0;
         address _token1 = token1;
-        require(to != _token0 && to != _token1, 'Honor: INVALID_TO');
+        require(to != _token0 && to != _token1, 'HonorSwap: INVALID_TO');
         if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out); // optimistically transfer tokens
         if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out); // optimistically transfer tokens
-        if (data.length > 0) IHonorCallee(to).honorCall(msg.sender, amount0Out, amount1Out, data);
+        if (data.length > 0) IHonorSwapCallee(to).HonorSwapCall(msg.sender, amount0Out, amount1Out, data);
         balance0 = IERC20(_token0).balanceOf(address(this));
         balance1 = IERC20(_token1).balanceOf(address(this));
         }
         uint amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
         uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
-        require(amount0In > 0 || amount1In > 0, 'Honor: INSUFFICIENT_INPUT_AMOUNT');
+        require(amount0In > 0 || amount1In > 0, 'HonorSwap: INSUFFICIENT_INPUT_AMOUNT');
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
-        uint balance0Adjusted = (balance0.mul(10000).sub(amount0In.mul(25)));
-        uint balance1Adjusted = (balance1.mul(10000).sub(amount1In.mul(25)));
-        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(10000**2), 'Honor: K');
+        uint _swapFee = swapFee;
+        uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(_swapFee));
+        uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(_swapFee));
+        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'HonorSwap: K');
         }
 
         _update(balance0, balance1, _reserve0, _reserve1);
@@ -443,10 +465,9 @@ contract HonorPair is IHonorPair, HonorERC20 {
 }
 
 contract HonorFactory is IHonorFactory {
-    bytes32 public constant INIT_CODE_PAIR_HASH = keccak256(abi.encodePacked(type(HonorPair).creationCode));
-
     address public feeTo;
     address public feeToSetter;
+    bytes32 public INIT_CODE_HASH = keccak256(abi.encodePacked(type(HonorPair).creationCode));
 
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
@@ -462,10 +483,10 @@ contract HonorFactory is IHonorFactory {
     }
 
     function createPair(address tokenA, address tokenB) external returns (address pair) {
-        require(tokenA != tokenB, 'Honor: IDENTICAL_ADDRESSES');
+        require(tokenA != tokenB, 'HonorSwap: IDENTICAL_ADDRESSES');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-        require(token0 != address(0), 'Honor: ZERO_ADDRESS');
-        require(getPair[token0][token1] == address(0), 'Honor: PAIR_EXISTS'); // single check is sufficient
+        require(token0 != address(0), 'HonorSwap: ZERO_ADDRESS');
+        require(getPair[token0][token1] == address(0), 'HonorSwap: PAIR_EXISTS'); // single check is sufficient
         bytes memory bytecode = type(HonorPair).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         assembly {
@@ -479,12 +500,39 @@ contract HonorFactory is IHonorFactory {
     }
 
     function setFeeTo(address _feeTo) external {
-        require(msg.sender == feeToSetter, 'Honor: FORBIDDEN');
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
         feeTo = _feeTo;
     }
 
     function setFeeToSetter(address _feeToSetter) external {
-        require(msg.sender == feeToSetter, 'Honor: FORBIDDEN');
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
         feeToSetter = _feeToSetter;
+    }
+
+    function setDevFee(address _pair, uint8 _devFee) external {
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
+        require(_devFee > 0, 'HonorSwap: FORBIDDEN_FEE');
+        HonorPair(_pair).setDevFee(_devFee);
+    }
+    
+    function setSwapFee(address _pair, uint32 _swapFee) external {
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
+        HonorPair(_pair).setSwapFee(_swapFee);
+    }
+
+    function setAllDevFee(uint8 _devFee) external {
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
+        for(uint i=0;i<allPairs.length;i++)
+        {
+            HonorPair(allPairs[i]).setDevFee(_devFee);
+        }
+    }
+
+    function setAllSwapFee(uint8 _swapFee) external {
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
+        for(uint i=0;i<allPairs.length;i++)
+        {
+            HonorPair(allPairs[i]).setSwapFee(_swapFee);
+        }
     }
 }
