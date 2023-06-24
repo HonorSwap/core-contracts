@@ -17,6 +17,8 @@ contract HonorRouter is IHonorRouter02 {
     address public immutable override factory;
     address public immutable override WETH;
 
+
+
     modifier ensure(uint deadline) {
         require(deadline >= block.timestamp, 'HonorRouter: EXPIRED');
         _;
@@ -25,11 +27,15 @@ contract HonorRouter is IHonorRouter02 {
     constructor(address _factory, address _WETH) public {
         factory = _factory;
         WETH = _WETH;
+ 
     }
 
     receive() external payable {
         assert(msg.sender == WETH); // only accept ETH via fallback from the WETH contract
     }
+
+
+
 
     // **** ADD LIQUIDITY ****
     function _addLiquidity(
@@ -46,6 +52,7 @@ contract HonorRouter is IHonorRouter02 {
         }
         (uint reserveA, uint reserveB) = HonorLibrary.getReserves(factory, tokenA, tokenB);
         if (reserveA == 0 && reserveB == 0) {
+
             (amountA, amountB) = (amountADesired, amountBDesired);
         } else {
             uint amountBOptimal = HonorLibrary.quote(amountADesired, reserveA, reserveB);

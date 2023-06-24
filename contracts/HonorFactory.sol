@@ -479,6 +479,7 @@ contract HonorFactory is IHonorFactory {
     address public feeToSetter;
     bytes32 public INIT_CODE_HASH = keccak256(abi.encodePacked(type(HonorPair).creationCode));
 
+    mapping(address=>uint8) public whiteList;
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
 
@@ -492,7 +493,23 @@ contract HonorFactory is IHonorFactory {
         return allPairs.length;
     }
 
+    function setTokenAccess(address _token,uint8 _access) public {
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
+        whiteList[_token]=_access;
+    }
+
+
     function createPair(address tokenA, address tokenB) external returns (address pair) {
+        uint8 t1Access=whiteList[tokenA];
+        uint8 t2Access=whiteList[tokenB];
+        require(t1Access>0 && t2Access>0,"HonorSwap: No Access");
+        if(t1Access==2 || t2Access==2)
+        {
+            if(msg.sender!=feeToSetter)
+            {
+                revert("HonorSwap: No Access");
+            }
+        }
         require(tokenA != tokenB, 'HonorSwap: IDENTICAL_ADDRESSES');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'HonorSwap: ZERO_ADDRESS');
