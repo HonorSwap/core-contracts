@@ -17,6 +17,16 @@ interface IHonorFactory {
 
     function setFeeTo(address) external;
     function setFeeToSetter(address) external;
+
+
+
+    function setDevFee(address , uint8 ) external ;
+    
+    function setSwapFee(address , uint32 ) external ;
+
+    function setAllDevFee(uint8 ) external ;
+
+    function setAllSwapFee(uint8 ) external ;
 }
 
 interface IHonorPair {
