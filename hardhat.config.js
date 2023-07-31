@@ -19,6 +19,12 @@ module.exports = {
       gasPrice: 20000000000,
       accounts: [privateKey]
     },
+    testNodeReal: {
+      url: "https://bsc-testnet.nodereal.io/v1/6e51276d312a4f698b27907f87738d87",
+      chainId: 97,
+      gasPrice: 20000000000,
+      accounts: [privateKey]
+    },
     matic: {
       url: "https://rpc-mumbai.maticvigil.com",
       chainId: 80001,

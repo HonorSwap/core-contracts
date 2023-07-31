@@ -10,7 +10,7 @@ const [owner, otherAccount] = await hre.ethers.getSigners();
 
   await factory.deployed();
 
-  const codePair=await factory.INIT_CODE_PAIR_HASH();
+  const codePair=await factory.INIT_CODE_HASH();
   console.log(
     `Factory  deployed to ${factory.address} CODE PAIR: ${codePair}`
   );
