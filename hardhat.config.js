@@ -84,6 +84,9 @@ module.exports = {
     ],
   },
   etherscan: {
-    apiKey: "WUZCWJ657G2GHFNXZ9H7K9NCUI89HVQI6F",
+    apiKey: "1MCGJ2612V5G9D6TDNTEMQ7B1CDS8ZX7MW",
  }
+ 
 };
+
+//Binance Testnet ApiKEY: WUZCWJ657G2GHFNXZ9H7K9NCUI89HVQI6F
