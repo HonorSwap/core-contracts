@@ -19,7 +19,7 @@ library HonorLibrary {
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
-                hex'c41f1f155b1e3394d2b3fdc5775d491e64b0f6af94c352767bd6b872d8a5b305' // init code hash
+                hex'c5f6bb6edfa8901aaae200ab98d4d03ed457358001812b161cc4222b8ae14c98' // init code hash
             ))));
     }
 
