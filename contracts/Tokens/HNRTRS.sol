@@ -159,7 +159,7 @@ contract Ownable is Context {
   }
 }
 
-contract HNRUSDToken is Context, IBEP20, Ownable {
+contract HNRTRS is Context, IBEP20, Ownable {
   using SafeMath for uint256;
 
   mapping (address => uint256) private _balances;
@@ -172,10 +172,10 @@ contract HNRUSDToken is Context, IBEP20, Ownable {
   string public _name;
 
   constructor() public {
-    _name = "HNRUSD Token";
-    _symbol = "HNRUSD";
+    _name = "dHNRTRS Token";
+    _symbol = "dHNRTRS";
     _decimals = 18;
-    _totalSupply = 10*(10**26);
+    _totalSupply = 10*(10**18);
     _balances[msg.sender] = _totalSupply;
 
     emit Transfer(address(0), msg.sender, _totalSupply);

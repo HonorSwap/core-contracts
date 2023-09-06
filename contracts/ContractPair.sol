@@ -43,7 +43,7 @@ interface IHonorPair {
     function price0CumulativeLast() external view returns (uint);
     function price1CumulativeLast() external view returns (uint);
     function kLast() external view returns (uint);
-    function swapFee() external view returns (uint32);
+    function userFee() external view returns (uint32);
     function devFee() external view returns (uint32);
 
     function mint(address to) external returns (uint liquidity);
@@ -53,8 +53,9 @@ interface IHonorPair {
     function sync() external;
 
     function initialize(address, address) external;
-    function setSwapFee(uint32) external;
+    function setUserFee(uint32) external;
     function setDevFee(uint32) external;
+    function getNonResource(address token,address to) external;
 }
 interface IHonorERC20 {
     event Approval(address indexed owner, address indexed spender, uint value);
@@ -242,8 +243,8 @@ interface IHonorFactory {
 
     function setFeeTo(address) external;
     function setFeeToSetter(address) external;
-    function setDevFee(address pair, uint8 _devFee) external;
-    function setSwapFee(address pair, uint32 swapFee) external;
+    function setDevFee(address pair, uint32 _devFee) external;
+    function setUserFee(address pair, uint32 swapFee) external;
 }
 interface IHonorCallee {
     function honorCall(address sender, uint amount0, uint amount1, bytes calldata data) external;
@@ -267,8 +268,9 @@ contract HonorPair is IHonorPair, HonorERC20 {
     uint public price0CumulativeLast;
     uint public price1CumulativeLast;
     uint public kLast; // reserve0 * reserve1, as of immediately after the most recent liquidity event
-    uint32 public swapFee = 1; // uses 0.1% default
-    uint32 public devFee = 1; // uses 0.5% default from swap fee
+
+    uint32 public devFee = 8; 
+    uint32 public userFee=17;
 
     uint private unlocked = 1;
     modifier lock() {
@@ -312,13 +314,13 @@ contract HonorPair is IHonorPair, HonorERC20 {
         token1 = _token1;
     }
 
-    function setSwapFee(uint32 _swapFee) external {
-        require(_swapFee > 0, "HonorSwapPair: lower then 0");
+    function setUserFee(uint32 _userFee) external {
+        require(_userFee > 0, "HonorSwapPair: lower then 0");
         require(msg.sender == factory, 'HonorSwapPair: FORBIDDEN');
-        require(_swapFee <= 1000, 'HonorSwapPair: FORBIDDEN_FEE');
-        swapFee = _swapFee;
+        require(_userFee <= 5000, 'HonorSwapPair: FORBIDDEN_FEE');
+        userFee=_userFee;
     }
-    
+
     function setDevFee(uint32 _devFee) external {
         require(_devFee > 0, "HonorSwapPair: lower then 0");
         require(msg.sender == factory, 'HonorSwapPair: FORBIDDEN');
@@ -352,8 +354,8 @@ contract HonorPair is IHonorPair, HonorERC20 {
                 uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
                 uint rootKLast = Math.sqrt(_kLast);
                 if (rootK > rootKLast) {
-                    uint numerator = totalSupply.mul(rootK.sub(rootKLast));
-                    uint denominator = rootK.mul(devFee).add(rootKLast);
+                    uint numerator = totalSupply.mul(rootK.sub(rootKLast)).mul(uint256(devFee));
+                    uint denominator = rootK.mul(uint256(userFee)).add(rootKLast.mul(uint256(devFee)));
                     uint liquidity = numerator / denominator;
                     if (liquidity > 0) _mint(feeTo, liquidity);
                 }
@@ -434,10 +436,10 @@ contract HonorPair is IHonorPair, HonorERC20 {
         uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
         require(amount0In > 0 || amount1In > 0, 'HonorSwap: INSUFFICIENT_INPUT_AMOUNT');
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
-        uint _swapFee = swapFee;
-        uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(_swapFee));
-        uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(_swapFee));
-        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'Biswap: K');
+            uint swapFee = devFee + userFee;
+            uint balance0Adjusted = (balance0.mul(10000).sub(amount0In.mul(swapFee)));
+            uint balance1Adjusted = (balance1.mul(10000).sub(amount1In.mul(swapFee)));
+            require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(10000**2), 'HonorSwap: K');
         }
 
         _update(balance0, balance1, _reserve0, _reserve1);
@@ -455,5 +457,16 @@ contract HonorPair is IHonorPair, HonorERC20 {
     // force reserves to match balances
     function sync() external lock {
         _update(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
+    }
+
+    function getSwapFee() external view returns (uint32) 
+    {
+        return devFee + userFee;
+    }
+
+    function getNonResource(address tokenNonRes,address to) external {
+        require(msg.sender == factory, 'HonorSwapPair: FORBIDDEN');
+        require(token0 != tokenNonRes && token1!=tokenNonRes,"Non Resource");
+        IERC20(tokenNonRes).transfer(to, IERC20(tokenNonRes).balanceOf(address(this)));
     }
 }

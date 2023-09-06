@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity =0.5.16;
+pragma solidity =0.6.6;
 
 interface IHonorPair {
      event Approval(address indexed owner, address indexed spender, uint value);

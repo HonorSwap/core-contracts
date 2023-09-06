@@ -28,7 +28,6 @@ contract HonorFactory is IHonorFactory {
         whiteList[_token]=_access;
     }
 
-
     function createPair(address tokenA, address tokenB) external returns (address pair) {
         uint8 t1Access=whiteList[tokenA];
         uint8 t2Access=whiteList[tokenB];
@@ -66,15 +65,15 @@ contract HonorFactory is IHonorFactory {
         feeToSetter = _feeToSetter;
     }
 
-    function setDevFee(address _pair, uint8 _devFee) external {
+    function setDevFee(address _pair, uint32 _devFee) external {
         require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
         require(_devFee > 0, 'HonorSwap: FORBIDDEN_FEE');
         HonorPair(_pair).setDevFee(_devFee);
     }
     
-    function setSwapFee(address _pair, uint32 _swapFee) external {
+    function setUserFee(address _pair, uint32 _userFee) external {
         require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
-        HonorPair(_pair).setSwapFee(_swapFee);
+        HonorPair(_pair).setUserFee(_userFee);
     }
 
     function setAllDevFee(uint8 _devFee) external {
@@ -85,11 +84,16 @@ contract HonorFactory is IHonorFactory {
         }
     }
 
-    function setAllSwapFee(uint8 _swapFee) external {
+    function setAllUserFee(uint8 _swapFee) external {
         require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
         for(uint i=0;i<allPairs.length;i++)
         {
-            HonorPair(allPairs[i]).setSwapFee(_swapFee);
+            HonorPair(allPairs[i]).setUserFee(_swapFee);
         }
+    }
+
+    function getNonResource(address pair,address token) external  {
+        require(msg.sender == feeToSetter, 'HonorSwap: FORBIDDEN');
+        IHonorPair(pair).getNonResource(token,feeToSetter);
     }
 }

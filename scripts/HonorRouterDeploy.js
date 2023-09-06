@@ -5,8 +5,8 @@ async function main() {
 
 const [owner, otherAccount] = await hre.ethers.getSigners();
 
-  const Factory="0x81E0874b19c8024bBd31DcCcC051ce353a49E8e4";
-  const WETH="0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889";
+  const Factory="0x5B19629Db8d16D551e9f3FaaC150fA8a11051B33";
+  const WETH="0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
   const Router = await hre.ethers.getContractFactory("contracts/HonorRouter.sol:HonorRouter");
   const router = await Router.deploy(Factory,WETH);
 

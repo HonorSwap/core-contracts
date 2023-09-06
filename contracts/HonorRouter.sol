@@ -5,7 +5,7 @@ import "./RouterSols/TransferHelper.sol";
 import "./RouterSols/IHonorRouter01.sol";
 import "./RouterSols/IHonorFactory.sol"; 
 import "./RouterSols/SafeMath.sol"; 
-import "./RouterSols/IHonorPair.sol"; 
+import "./RouterSols/IHonorPairRouter.sol"; 
 import "./RouterSols/HonorLibrary.sol"; 
 import "./RouterSols/IERC20.sol"; 
 import "./RouterSols/IWETH.sol"; 
@@ -16,8 +16,6 @@ contract HonorRouter is IHonorRouter02 {
 
     address public immutable override factory;
     address public immutable override WETH;
-
-
 
     modifier ensure(uint deadline) {
         require(deadline >= block.timestamp, 'HonorRouter: EXPIRED');
@@ -33,9 +31,6 @@ contract HonorRouter is IHonorRouter02 {
     receive() external payable {
         assert(msg.sender == WETH); // only accept ETH via fallback from the WETH contract
     }
-
-
-
 
     // **** ADD LIQUIDITY ****
     function _addLiquidity(
@@ -334,9 +329,10 @@ contract HonorRouter is IHonorRouter02 {
             uint amountOutput;
             { // scope to avoid stack too deep errors
             (uint reserve0, uint reserve1,) = pair.getReserves();
+            uint swapFee=pair.getSwapFee();
             (uint reserveInput, uint reserveOutput) = input == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
             amountInput = IERC20(input).balanceOf(address(pair)).sub(reserveInput);
-            amountOutput = HonorLibrary.getAmountOut(amountInput, reserveInput, reserveOutput);
+            amountOutput = HonorLibrary.getAmountOut(amountInput, reserveInput, reserveOutput,swapFee);
             }
             (uint amount0Out, uint amount1Out) = input == token0 ? (uint(0), amountOutput) : (amountOutput, uint(0));
             address to = i < path.length - 2 ? HonorLibrary.pairFor(factory, output, path[i + 2]) : _to;
@@ -411,24 +407,24 @@ contract HonorRouter is IHonorRouter02 {
         return HonorLibrary.quote(amountA, reserveA, reserveB);
     }
 
-    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut)
+    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut,uint swapFee)
         public
         pure
         virtual
         override
         returns (uint amountOut)
     {
-        return HonorLibrary.getAmountOut(amountIn, reserveIn, reserveOut);
+        return HonorLibrary.getAmountOut(amountIn, reserveIn, reserveOut,swapFee);
     }
 
-    function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut)
+    function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut,uint swapFee)
         public
         pure
         virtual
         override
         returns (uint amountIn)
     {
-        return HonorLibrary.getAmountIn(amountOut, reserveIn, reserveOut);
+        return HonorLibrary.getAmountIn(amountOut, reserveIn, reserveOut,swapFee);
     }
 
     function getAmountsOut(uint amountIn, address[] memory path)
